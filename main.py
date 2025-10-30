@@ -66,7 +66,7 @@ def create_server():
         # Search the vector store using OpenAI API
         logger.info(f"Searching {VECTOR_STORE_ID} for query: '{query}'")
 
-        response = openai_client.vector_stores.search(
+        response = openai_client.beta.vector_stores.search(  # type: ignore[attr-defined]
             vector_store_id=VECTOR_STORE_ID, query=query)
 
         results = []
@@ -139,11 +139,11 @@ def create_server():
         logger.info(f"Fetching content from vector store for file ID: {id}")
 
         # Fetch file content from vector store
-        content_response = openai_client.vector_stores.files.content(
+        content_response = openai_client.beta.vector_stores.files.content(  # type: ignore[attr-defined]
             vector_store_id=VECTOR_STORE_ID, file_id=id)
 
         # Get file metadata
-        file_info = openai_client.vector_stores.files.retrieve(
+        file_info = openai_client.beta.vector_stores.files.retrieve(  # type: ignore[attr-defined]
             vector_store_id=VECTOR_STORE_ID, file_id=id)
 
         # Extract content from paginated response
