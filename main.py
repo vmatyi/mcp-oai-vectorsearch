@@ -26,9 +26,8 @@ openai_client = OpenAI()
 
 server_instructions = """
 This MCP server provides search and document retrieval capabilities 
-for deep research. Use the search tool to find relevant documents 
-based on keywords, then use the fetch tool to retrieve complete 
-document content with citations.
+for deep research. Use the search tool to find relevant document chunks 
+based on a search query.
 """
 
 
@@ -45,8 +44,7 @@ def create_server():
         Search for documents using OpenAI Vector Store search.
         
         This tool searches through the vector store to find semantically relevant matches.
-        Returns a list of search results with basic information. Use the fetch tool to get 
-        complete document content.
+        Returns a list of search results chunks.
         
         Args:
             query: Search query string. Natural language queries work best for semantic search.
@@ -66,8 +64,12 @@ def create_server():
         # Search the vector store using OpenAI API
         logger.info(f"Searching {VECTOR_STORE_ID} for query: '{query}'")
 
-        response = openai_client.beta.vector_stores.search(  # type: ignore[attr-defined]
-            vector_store_id=VECTOR_STORE_ID, query=query)
+        response = openai_client.vector_stores.search(  # type: ignore[attr-defined]
+            vector_store_id=VECTOR_STORE_ID,
+            query=query)
+
+        logger.info("Full response JSON:\n%s",
+                    response.model_dump_json(indent=2))
 
         results = []
 
@@ -77,6 +79,8 @@ def create_server():
                 # Extract file_id, filename, and content
                 item_id = getattr(item, 'file_id', f"vs_{i}")
                 item_filename = getattr(item, 'filename', f"Document {i+1}")
+                logger.info(
+                    f"Found file_id:{item_id} filename: '{item_filename}'")
 
                 # Extract text content from the content array
                 content_list = getattr(item, 'content', [])
@@ -93,8 +97,7 @@ def create_server():
                     text_content = "No content available"
 
                 # Create a snippet from content
-                text_snippet = text_content[:200] + "..." if len(
-                    text_content) > 200 else text_content
+                text_snippet = text_content  #text_content[:200] + "..." if len(text_content) > 200 else text_content
 
                 result = {
                     "id": item_id,
@@ -109,72 +112,74 @@ def create_server():
         logger.info(f"Vector store search returned {len(results)} results")
         return {"results": results}
 
-    @mcp.tool()
-    async def fetch(id: str) -> Dict[str, Any]:
-        """
-        Retrieve complete document content by ID for detailed 
-        analysis and citation. This tool fetches the full document 
-        content from OpenAI Vector Store. Use this after finding 
-        relevant documents with the search tool to get complete 
-        information for analysis and proper citation.
-        
-        Args:
-            id: File ID from vector store (file-xxx) or local document ID
-            
-        Returns:
-            Complete document with id, title, full text content, 
-            optional URL, and metadata
-            
-        Raises:
-            ValueError: If the specified ID is not found
-        """
-        if not id:
-            raise ValueError("Document ID is required")
+    # @mcp.tool()
+    # async def fetch(id: str) -> Dict[str, Any]:
+    #     """
+    #     Retrieve complete document content by ID for detailed
+    #     analysis and citation. This tool fetches the full document
+    #     content from OpenAI Vector Store. Use this after finding
+    #     relevant documents with the search tool to get complete
+    #     information for analysis and proper citation.
 
-        if not openai_client:
-            logger.error("OpenAI client not initialized - API key missing")
-            raise ValueError(
-                "OpenAI API key is required for vector store file retrieval")
+    #     Args:
+    #         id: File ID from vector store (file-xxx) or local document ID
 
-        logger.info(f"Fetching content from vector store for file ID: {id}")
+    #     Returns:
+    #         Complete document with id, title, full text content,
+    #         optional URL, and metadata
 
-        # Fetch file content from vector store
-        content_response = openai_client.beta.vector_stores.files.content(  # type: ignore[attr-defined]
-            vector_store_id=VECTOR_STORE_ID, file_id=id)
+    #     Raises:
+    #         ValueError: If the specified ID is not found
+    #     """
+    #     if not id:
+    #         raise ValueError("Document ID is required")
 
-        # Get file metadata
-        file_info = openai_client.beta.vector_stores.files.retrieve(  # type: ignore[attr-defined]
-            vector_store_id=VECTOR_STORE_ID, file_id=id)
+    #     if not openai_client:
+    #         logger.error("OpenAI client not initialized - API key missing")
+    #         raise ValueError(
+    #             "OpenAI API key is required for vector store file retrieval")
 
-        # Extract content from paginated response
-        file_content = ""
-        if hasattr(content_response, 'data') and content_response.data:
-            # Combine all content chunks from FileContentResponse objects
-            content_parts = []
-            for content_item in content_response.data:
-                if hasattr(content_item, 'text'):
-                    content_parts.append(content_item.text)
-            file_content = "\n".join(content_parts)
-        else:
-            file_content = "No content available"
+    #     logger.info(f"Fetching content from vector store for file ID: {id}")
 
-        # Use filename as title and create proper URL for citations
-        filename = getattr(file_info, 'filename', f"Document {id}")
+    #     # Fetch file content from vector store
+    #     content_response = openai_client.vector_stores.files.content(  # type: ignore[attr-defined]
+    #         vector_store_id=VECTOR_STORE_ID,
+    #         file_id=id)
 
-        result = {
-            "id": id,
-            "title": filename,
-            "text": file_content,
-            "url": f"https://platform.openai.com/storage/files/{id}",
-            "metadata": None
-        }
+    #     # Get file metadata
+    #     file_info = openai_client.vector_stores.files.retrieve(  # type: ignore[attr-defined]
+    #         vector_store_id=VECTOR_STORE_ID,
+    #         file_id=id)
 
-        # Add metadata if available from file info
-        if hasattr(file_info, 'attributes') and file_info.attributes:
-            result["metadata"] = file_info.attributes
+    #     # Extract content from paginated response
+    #     file_content = ""
+    #     if hasattr(content_response, 'data') and content_response.data:
+    #         # Combine all content chunks from FileContentResponse objects
+    #         content_parts = []
+    #         for content_item in content_response.data:
+    #             if hasattr(content_item, 'text'):
+    #                 content_parts.append(content_item.text)
+    #         file_content = "\n".join(content_parts)
+    #     else:
+    #         file_content = "No content available"
 
-        logger.info(f"Fetched vector store file: {id}")
-        return result
+    #     # Use filename as title and create proper URL for citations
+    #     filename = getattr(file_info, 'filename', f"Document {id}")
+
+    #     result = {
+    #         "id": id,
+    #         "title": filename,
+    #         "text": file_content,
+    #         "url": f"https://platform.openai.com/storage/files/{id}",
+    #         "metadata": None
+    #     }
+
+    #     # Add metadata if available from file info
+    #     if hasattr(file_info, 'attributes') and file_info.attributes:
+    #         result["metadata"] = file_info.attributes
+
+    #     logger.info(f"Fetched vector store file: {id}")
+    #     return result
 
     return mcp
 
@@ -199,7 +204,9 @@ def main():
 
     try:
         # Use FastMCP's built-in run method with SSE transport
-        server.run(transport="sse", host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+        server.run(transport="sse",
+                   host="0.0.0.0",
+                   port=int(os.getenv("PORT", 8080)))
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except Exception as e:
