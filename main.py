@@ -199,7 +199,7 @@ def main():
 
     try:
         # Use FastMCP's built-in run method with SSE transport
-        server.run(transport="sse", host="0.0.0.0", port=8000)
+        server.run(transport="sse", host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except Exception as e:
