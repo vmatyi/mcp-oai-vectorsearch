@@ -11,6 +11,7 @@ import os
 from typing import Dict, List, Any
 
 from fastmcp import FastMCP
+from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 from openai import OpenAI
 
 # Configure logging
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 # OpenAI configuration
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 VECTOR_STORE_ID = os.environ.get("VECTOR_STORE_ID", "")
+SESSION_SECRET = os.environ.get("SESSION_SECRET")
 
 # Initialize OpenAI client
 openai_client = OpenAI()
@@ -31,12 +33,29 @@ based on a search query.
 """
 
 
-def create_server():
+def create_server() -> FastMCP:
     """Create and configure the MCP server with search and fetch tools."""
 
-    # Initialize the FastMCP server
-    mcp = FastMCP(name="Sample Deep Research MCP Server",
-                  instructions=server_instructions)
+    # Token map: the ONLY valid token is the SESSION_SECRET.
+    # You can attach arbitrary claims; scopes are optional.
+    auth = None
+    if SESSION_SECRET:
+        auth = StaticTokenVerifier(
+            tokens={
+                SESSION_SECRET: {
+                    "sub": "mcp-user",
+                    "scopes": ["mcp:read", "mcp:call"],
+                    "client_id": "mcp-client"
+                }
+            }
+        )
+
+    # Initialize the FastMCP server **with** authentication
+    mcp = FastMCP(
+        name="Sample Deep Research MCP Server",
+        instructions=server_instructions,
+        auth=auth
+    )
 
     @mcp.tool()
     async def search(query: str) -> Dict[str, List[Dict[str, Any]]]:
